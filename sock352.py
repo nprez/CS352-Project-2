@@ -214,7 +214,7 @@ class socket:
         global ENCRYPT
         if (len(args) >= 1):
             if (args[0] == ENCRYPT):
-                self.encryption = True
+                self.encrypt = True
         # your code goes here
 
         # call  __sock352_get_packet() until we get a new conection
