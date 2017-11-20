@@ -244,6 +244,8 @@ class socket:
         # set the timeout
         # wait or check for the ACK or a timeout
 
+        if (self.encrypt):
+            #box encrypt
         udpPkt_hdr_data = struct.Struct(sock352HdrStructStr)
         header = udpPkt_hdr_data.pack(1, 0, 0, 0, 40, 0, 0, 0, self.seq, self.ack, 0, len(buffer))
         packet = header + buffer
@@ -274,6 +276,8 @@ class socket:
 
     def recv(self,nbytes):
         # fill in your code here
+        if(self.encrypt):
+            nbytes += 40
         self.packetList[0], ad = self.socket.recvfrom(nbytes+40)
         self.__sock352_get_packet()
         bytesreceived = self.packetList[0][40:]
@@ -304,6 +308,9 @@ class socket:
         header = self.packetList[self.PLindex][:40]
         msg = self.packetList[self.PLindex][40:]
         headerData = struct.unpack(sock352HdrStructStr, header)
+
+        if (self.encrypt):
+            #decrypt
 
         if (headerData[1] == 1):            #syn
             udpPkt_hdr_data = struct.Struct(sock352HdrStructStr)
