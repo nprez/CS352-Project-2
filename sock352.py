@@ -207,11 +207,13 @@ class socket:
                 incAckNum = retStruct[9]
                 #invalid
                 if(synCheck != 5 or incAckNum != self.seq+1 or (incSeqNum != self.ack and self.ack != 0)):
+                    print("Error 1")
                     continue
                 self.ack = incSeqNum+1
             except:
                 #first part failed
                 self.socket.sendto(header, self.addr)
+                print("Error 2")
                 continue
             waiting = False
         #third part
@@ -279,7 +281,7 @@ class socket:
         packet = None
         if (self.encrypt):
             header = udpPkt_hdr_data.pack(1, 16, 1, 0, 40, 0, 0, 0, self.seq, self.ack, 0, len(buffer)+40)
-            packet = header + self.box.encrypt(buffer)
+            packet = header + self.box.encrypt(buffer, nacl.utils.random(Box.NONCE_SIZE))
         else:
             header = udpPkt_hdr_data.pack(1, 0, 0, 0, 40, 0, 0, 0, self.seq, self.ack, 0, len(buffer))
             packet = header + buffer
@@ -297,11 +299,13 @@ class socket:
                 incAckNum = retStruct[9]
                 #invalid
                 if(ackCheck != 4 or incAckNum != self.seq+1 or incSeqNum != self.ack):
+                    print("Error 3")
                     continue
                 self.ack = incSeqNum+1
             except:
                 #first part failed
                 bytessent = self.socket.sendto(packet, self.addr)
+                print("Error 4")
                 continue
             waiting = False
         self.seq += 1
@@ -341,9 +345,6 @@ class socket:
         #              send a reset (RST) packet with the sequence number
         header = self.packetList[self.PLindex][:40]
         msg = self.packetList[self.PLindex][40:]
-        if(self.encrypt):
-            msg = self.box.decrypt(msg)
-            self.packetList[self.PLindex][40:] = msg
         headerData = struct.unpack(sock352HdrStructStr, header)
 
         if (headerData[1] == 1):            #syn
@@ -365,12 +366,14 @@ class socket:
                     incAckNum = retStruct[9]
                     #invalid
                     if(ackCheck != 5 or incAckNum != self.seq+1 or incSeqNum != self.ack):
+                        print("Error 5")
                         continue
                     self.ack+=1;
                 except:
                     #our ack failed; resend
                     self.socket.settimeout(0.2)
                     self.socket.sendto(syn, self.addr)
+                    print("Error 6")
                     continue
                 waiting = False
             self.seq+=1
@@ -382,6 +385,9 @@ class socket:
             self.socket.sendto(fin, self.addr)
 
         elif (headerData[1] == 0 or headerData[1] == 16):      #data
+            if(self.encrypt):
+                msg = self.box.decrypt(msg)
+                self.packetList[self.PLindex][40:] = msg
             udpPkt_hdr_data = struct.Struct(sock352HdrStructStr)
             self.ack+=1
             ack = udpPkt_hdr_data.pack(1, 4, 0, 0, 40, 0, 0, 0, self.seq, self.ack, 0, 0)
