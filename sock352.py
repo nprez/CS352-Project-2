@@ -1,8 +1,8 @@
 
-# CS 352 project part 2 
-# this is the initial socket library for project 2 
+# CS 352 project part 2
+# this is the initial socket library for project 2
 # You wil need to fill in the various methods in this
-# library 
+# library
 
 # main libraries
 import binascii
@@ -44,15 +44,15 @@ privateKeysHex = {}
 publicKeys = {}
 privateKeys = {}
 
-# this is 0xEC 
-ENCRYPT = 236 
+# this is 0xEC
+ENCRYPT = 236
 
 # this is the structure of the sock352 packet
 sock352HdrStructStr = '!BBBBHHLLQQLL'
 
 ##8 version; /* version number */                               0x1
 ##8 flags; /* for connection set up, tear-down, control */      see below
-#8 opt_ptr; /* option type between the header and payload */    0
+##8 opt_ptr; /* option type between the header and payload */    1 = encrypted
 #8 protocol; /* higher-level protocol */                        0
 ##16 header_len; /* length of the header */                     40
 #16 checksum; /* checksum of the packet */                      calculate this
@@ -73,7 +73,7 @@ sock352HdrStructStr = '!BBBBHHLLQQLL'
 # defines the UDP ports all messages are sent
 # and received from.
 def init(UDPportTx,UDPportRx): # initialize your UDP socket here
-    # create a UDP/datagram socket 
+    # create a UDP/datagram socket
     # bind the port to the Rx (receive) port number
     global sock352portTx
     global sock352portRx
@@ -88,10 +88,10 @@ def init(UDPportTx,UDPportRx): # initialize your UDP socket here
     else:
         sock352portRx = int(UDPportRx)
 
-    # create the sockets to send and receive UDP packets on 
+    # create the sockets to send and receive UDP packets on
     # if the ports are not equal, create two sockets, one for Tx and one for Rx
 
-    
+
 # read the keyfile. The result should be a private key and a keychain of
 # public keys
 def readKeyChain(filename):
@@ -99,7 +99,7 @@ def readKeyChain(filename):
     global privateKeysHex
     global publicKeys
     global privateKeys
-    
+
     if (filename):
         try:
             keyfile_fd = open(filename,"r")
@@ -121,12 +121,12 @@ def readKeyChain(filename):
         except Exception,e:
             print ( "error: opening keychain file: %s %s" % (filename,repr(e)))
     else:
-            print ("error: No filename presented")             
+            print ("error: No filename presented")
 
     return (publicKeys,privateKeys)
 
 class socket:
-    
+
     def __init__(self):  # fill in your code here
         # create any lists/arrays/hashes you need
         self.sPort = sock352portTx
@@ -136,31 +136,34 @@ class socket:
         self.ack = 0
         self.socket = syssock.socket(AF_INET, SOCK_DGRAM)
         self.encrypt = False
+        self.myPrivateKey = None
+        self.theirPublicKey = None
+        self.box = None
 
         self.packetList = []    # for part 1 we dont need a buffer to be stored,
         # so we're only using this list to store the current packet
         self.PLindex = 0
         return
-        
+
     def bind(self,address):
-        # bind is not used in this assignment 
+        # bind is not used in this assignment
         self.socket.bind(("", int(address[1])))
         return
 
     def connect(self,*args):
 
-        # example code to parse an argument list 
+        # example code to parse an argument list
         global sock352portTx
         global ENCRYPT
-        if (len(args) >= 1): 
+        if (len(args) >= 1):
             (host,port) = args[0]
         if (len(args) >= 2):
             if (args[1] == ENCRYPT):
                 self.encrypt = True
-                
-        # your code goes here
 
-        #  create a new sequence number 
+
+        # your code goes here
+        #  create a new sequence number
         #  create a new packet header with the SYN bit set in the flags (use the Struct.pack method)
         #  also set the other fields (e.g sequence #)
         #   add the packet to the send buffer
@@ -170,6 +173,20 @@ class socket:
         #   set the send and recv packets sequence numbers
 
         self.addr = (syssock.gethostbyname(syssock.getfqdn(host)), (int)(port))
+
+        #search for correct keys
+        if(self.encrypt):
+            for k, v in publicKeys.items():
+                if((k[0] == self.addr or k[0] == host or k[0] == '*') and (k[1] == self.sPort or k[1] == port or k[1] == '*')):
+                    self.theirPublicKey = v
+                    break
+            for k, v in privateKeys.items():
+                if((k[0] == self.addr or k[0] == host or k[0] == '*') and (k[1] == self.rPort or k[1] == '*')):
+                    self.myPrivateKey = v
+                    break
+            #make a box
+            self.box = Box(self.myPrivateKey, self.theirPublicKey)
+
         self.seq = random.randint(0, 1000)
         self.socket.bind(("", sock352portRx))
 
@@ -206,11 +223,11 @@ class socket:
         return
 
     def listen(self,backlog):
-        # listen is not used in this assignments 
+        # listen is not used in this assignments
         return
 
     def accept(self,*args):
-        # example code to parse an argument list 
+        # example code to parse an argument list
         global ENCRYPT
         if (len(args) >= 1):
             if (args[0] == ENCRYPT):
@@ -224,6 +241,19 @@ class socket:
         self.packetList.append(temp[0])
         ad = temp[1]
         self.addr = (syssock.gethostbyname(syssock.getfqdn(ad[0])), (int)(ad[1]))
+
+        #search for correct keys
+        if(self.encrypt):
+            for k, v in publicKeys.items():
+                if((k[0] == self.addr or k[0] == ad[0] or k[0] == '*') and (k[1] == self.sPort or k[1] == ad[1] or k[1] == '*')):
+                    self.theirPublicKey = v
+                    break
+            for k, v in privateKeys.items():
+                if((k[0] == self.addr or k[0] == ad[0] or k[0] == '*') and (k[1] == self.rPort or k[1] == '*')):
+                    self.myPrivateKey = v
+                    break
+            #make a box
+            self.box = Box(self.myPrivateKey, self.theirPublicKey)
 
         self.__sock352_get_packet()
         self.packetList[0] = None
@@ -239,16 +269,20 @@ class socket:
         # make sure the correct fields are set in the flags
         # make sure the sequence and acknowlegement numbers are correct
         # create a new sock352 header using the struct.pack
-        # create a new UDP packet with the header and buffer 
+        # create a new UDP packet with the header and buffer
         # send the UDP packet to the destination and transmit port
         # set the timeout
         # wait or check for the ACK or a timeout
 
-        if (self.encrypt):
-            #box encrypt
         udpPkt_hdr_data = struct.Struct(sock352HdrStructStr)
-        header = udpPkt_hdr_data.pack(1, 0, 0, 0, 40, 0, 0, 0, self.seq, self.ack, 0, len(buffer))
-        packet = header + buffer
+        header = None
+        packet = None
+        if (self.encrypt):
+            header = udpPkt_hdr_data.pack(1, 16, 1, 0, 40, 0, 0, 0, self.seq, self.ack, 0, len(buffer)+40)
+            packet = header + self.box.encrypt(buffer)
+        else:
+            header = udpPkt_hdr_data.pack(1, 0, 0, 0, 40, 0, 0, 0, self.seq, self.ack, 0, len(buffer))
+            packet = header + buffer
 
         bytessent = self.socket.sendto(packet, self.addr)
 
@@ -298,7 +332,7 @@ class socket:
         #    Send a SYN packet back with the correct sequence number
         #    Wake up any readers wating for a connection via accept() or return
         #  else
-        #      if it is a connection tear down (FIN) 
+        #      if it is a connection tear down (FIN)
         #        send a FIN packet, remove fragment list
         #      else if it is a data packet
         #           check the sequence numbers, add to the list of received fragments
@@ -307,10 +341,10 @@ class socket:
         #              send a reset (RST) packet with the sequence number
         header = self.packetList[self.PLindex][:40]
         msg = self.packetList[self.PLindex][40:]
+        if(self.encrypt):
+            msg = self.box.decrypt(msg)
+            self.packetList[self.PLindex][40:] = msg
         headerData = struct.unpack(sock352HdrStructStr, header)
-
-        if (self.encrypt):
-            #decrypt
 
         if (headerData[1] == 1):            #syn
             udpPkt_hdr_data = struct.Struct(sock352HdrStructStr)
@@ -347,7 +381,7 @@ class socket:
             fin = udpPkt_hdr_data.pack(1, 6, 0, 0, 40, 0, 0, 0, self.seq, self.ack, 0, 0)
             self.socket.sendto(fin, self.addr)
 
-        elif (headerData[1] == 0):      #data
+        elif (headerData[1] == 0 or headerData[1] == 16):      #data
             udpPkt_hdr_data = struct.Struct(sock352HdrStructStr)
             self.ack+=1
             ack = udpPkt_hdr_data.pack(1, 4, 0, 0, 40, 0, 0, 0, self.seq, self.ack, 0, 0)
