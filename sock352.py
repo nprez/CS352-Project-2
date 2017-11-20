@@ -177,11 +177,25 @@ class socket:
         #search for correct keys
         if(self.encrypt):
             for k, v in publicKeys.items():
-                if((k[0] == self.addr or k[0] == host or k[0] == '*') and (k[1] == self.sPort or k[1] == port or k[1] == '*')):
+                temp = k
+                if(k[0] != '*' and k[1] != '*'):
+                    temp = (syssock.gethostbyname(syssock.getfqdn(k[0])), (int)(k[1]))
+                elif(k[0] != '*'):
+                    temp = (syssock.gethostbyname(syssock.getfqdn(k[0])), k[1])
+                elif(k[1] != '*'):
+                    temp = (k[0], (int)(k[1]))
+                if((temp[0] == self.addr[0] or temp[0] == host or temp[0] == '*') and (temp[1] == self.sPort or temp[1] == self.addr[1] or temp[1] == port or temp[1] == '*')):
                     self.theirPublicKey = v
                     break
             for k, v in privateKeys.items():
-                if((k[0] == self.addr or k[0] == host or k[0] == '*') and (k[1] == self.rPort or k[1] == '*')):
+                temp = k
+                if(k[0] != '*' and k[1] != '*'):
+                    temp = (syssock.gethostbyname(syssock.getfqdn(k[0])), (int)(k[1]))
+                elif(k[0] != '*'):
+                    temp = (syssock.gethostbyname(syssock.getfqdn(k[0])), k[1])
+                elif(k[1] != '*'):
+                    temp = (k[0], (int)(k[1]))
+                if((temp[0] == self.addr[0] or temp[0] == host or temp[0] == '*') and (temp[1] == self.rPort or temp[1] == '*')):
                     self.myPrivateKey = v
                     break
             #make a box
@@ -207,13 +221,11 @@ class socket:
                 incAckNum = retStruct[9]
                 #invalid
                 if(synCheck != 5 or incAckNum != self.seq+1 or (incSeqNum != self.ack and self.ack != 0)):
-                    print("Error 1")
                     continue
                 self.ack = incSeqNum+1
             except:
                 #first part failed
                 self.socket.sendto(header, self.addr)
-                print("Error 2")
                 continue
             waiting = False
         #third part
@@ -247,11 +259,25 @@ class socket:
         #search for correct keys
         if(self.encrypt):
             for k, v in publicKeys.items():
-                if((k[0] == self.addr or k[0] == ad[0] or k[0] == '*') and (k[1] == self.sPort or k[1] == ad[1] or k[1] == '*')):
+                temp = k
+                if(k[0] != '*' and k[1] != '*'):
+                    temp = (syssock.gethostbyname(syssock.getfqdn(k[0])), (int)(k[1]))
+                elif(k[0] != '*'):
+                    temp = (syssock.gethostbyname(syssock.getfqdn(k[0])), k[1])
+                elif(k[1] != '*'):
+                    temp = (k[0], (int)(k[1]))
+                if((temp[0] == self.addr[0] or temp[0] == ad[0] or temp[0] == '*') and (temp[1] == self.sPort or temp[1] == self.addr[1] or temp[1] == ad[1] or temp[1] == '*')):
                     self.theirPublicKey = v
                     break
             for k, v in privateKeys.items():
-                if((k[0] == self.addr or k[0] == ad[0] or k[0] == '*') and (k[1] == self.rPort or k[1] == '*')):
+                temp = k
+                if(k[0] != '*' and k[1] != '*'):
+                    temp = (syssock.gethostbyname(syssock.getfqdn(k[0])), (int)(k[1]))
+                elif(k[0] != '*'):
+                    temp = (syssock.gethostbyname(syssock.getfqdn(k[0])), k[1])
+                elif(k[1] != '*'):
+                    temp = (k[0], (int)(k[1]))
+                if((temp[0] == self.addr[0] or temp[0] == ad[0] or temp[0] == '*') and (temp[1] == self.rPort or temp[1] == '*')):
                     self.myPrivateKey = v
                     break
             #make a box
@@ -281,7 +307,7 @@ class socket:
         packet = None
         if (self.encrypt):
             header = udpPkt_hdr_data.pack(1, 16, 1, 0, 40, 0, 0, 0, self.seq, self.ack, 0, len(buffer)+40)
-            packet = header + self.box.encrypt(buffer, nacl.utils.random(Box.NONCE_SIZE))
+            packet = header + self.box.encrypt(buffer)
         else:
             header = udpPkt_hdr_data.pack(1, 0, 0, 0, 40, 0, 0, 0, self.seq, self.ack, 0, len(buffer))
             packet = header + buffer
@@ -299,13 +325,11 @@ class socket:
                 incAckNum = retStruct[9]
                 #invalid
                 if(ackCheck != 4 or incAckNum != self.seq+1 or incSeqNum != self.ack):
-                    print("Error 3")
                     continue
                 self.ack = incSeqNum+1
             except:
                 #first part failed
                 bytessent = self.socket.sendto(packet, self.addr)
-                print("Error 4")
                 continue
             waiting = False
         self.seq += 1
@@ -366,14 +390,12 @@ class socket:
                     incAckNum = retStruct[9]
                     #invalid
                     if(ackCheck != 5 or incAckNum != self.seq+1 or incSeqNum != self.ack):
-                        print("Error 5")
                         continue
                     self.ack+=1;
                 except:
                     #our ack failed; resend
                     self.socket.settimeout(0.2)
                     self.socket.sendto(syn, self.addr)
-                    print("Error 6")
                     continue
                 waiting = False
             self.seq+=1
@@ -387,7 +409,7 @@ class socket:
         elif (headerData[1] == 0 or headerData[1] == 16):      #data
             if(self.encrypt):
                 msg = self.box.decrypt(msg)
-                self.packetList[self.PLindex][40:] = msg
+                self.packetList[self.PLindex] = header + msg
             udpPkt_hdr_data = struct.Struct(sock352HdrStructStr)
             self.ack+=1
             ack = udpPkt_hdr_data.pack(1, 4, 0, 0, 40, 0, 0, 0, self.seq, self.ack, 0, 0)
